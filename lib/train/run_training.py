@@ -1,5 +1,5 @@
 import os
-local_rank = os.environ['LOCAL_RANK']
+local_rank = int(os.environ.get('LOCAL_RANK', -1))
 # local_rank = -1
 import sys
 import argparse
