@@ -95,8 +95,11 @@ class CustomSOT(BaseVideoDataset):
                 line = line.strip()
                 if not line:
                     continue
-                vals = line.split(',')
-                gt.append([float(v) for v in vals[:4]])
+                # Support both comma and space/tab delimiters
+                line = line.replace(',', ' ')
+                vals = line.split()
+                if len(vals) >= 4:
+                    gt.append([float(v) for v in vals[:4]])
         return torch.tensor(gt, dtype=torch.float32)
 
     def get_sequence_info(self, seq_id):
