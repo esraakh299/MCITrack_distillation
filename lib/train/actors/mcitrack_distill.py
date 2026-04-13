@@ -231,12 +231,12 @@ class MCITrackDistillActor(BaseActor):
                 s_boxes_flat = s_boxes.view(-1, 4)
                 t_boxes_flat = t_boxes.view(-1, 4)
                 
-                _, iou_s_vec = box_iou(s_boxes_flat, gt_boxes_rep)
-                _, iou_t_vec = box_iou(t_boxes_flat, gt_boxes_rep)
+                iou_s_vec, _ = box_iou(s_boxes_flat, gt_boxes_rep)
+                iou_t_vec, _ = box_iou(t_boxes_flat, gt_boxes_rep)
                 
-                # Reshape back and take best query per sample
-                iou_s = iou_s_vec.diag().view(B, Q).max(dim=1)[0]
-                iou_t = iou_t_vec.diag().view(B, Q).max(dim=1)[0]
+                # In this repo, box_iou is element-wise (N,), so no .diag() is needed
+                iou_s = iou_s_vec.view(B, Q).max(dim=1)[0]
+                iou_t = iou_t_vec.view(B, Q).max(dim=1)[0]
 
                 hard_target = (iou_t > iou_s).long() # (B,)
 
