@@ -22,16 +22,8 @@ DATA:
     NUMBER: 5
   TRAIN:
     DATASETS_NAME:
-    - LASOT
-    - GOT10K_vottrain
-    - COCO17
-    - TRACKINGNET
-    - VASTTRACK
+    - CUSTOM_SOT
     DATASETS_RATIO:
-    - 1
-    - 1
-    - 1
-    - 1
     - 1
     SAMPLE_PER_EPOCH: 60000
 MODEL:

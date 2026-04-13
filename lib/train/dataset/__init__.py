@@ -22,3 +22,4 @@ from .otb99_lang import Otb99_lang
 from .tnl2k import Tnl2k
 from .refcoco_seq import RefCOCOSeq
 from .vasttrack import VastTrack
+from .custom_sot import CustomSOT

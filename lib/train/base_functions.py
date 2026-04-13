@@ -3,7 +3,7 @@ from torch.utils.data.distributed import DistributedSampler
 import torch.nn as nn
 
 # datasets related
-from lib.train.dataset import Lasot, Got10k, MSCOCOSeq, ImagenetVID, TrackingNet, Imagenet1k, VastTrack
+from lib.train.dataset import Lasot, Got10k, MSCOCOSeq, ImagenetVID, TrackingNet, Imagenet1k, VastTrack, CustomSOT
 from lib.train.dataset import Lasot_lmdb, Got10k_lmdb, MSCOCOSeq_lmdb, ImagenetVID_lmdb, TrackingNet_lmdb
 from lib.train.dataset import VisEvent, LasHeR, DepthTrack
 from lib.train.dataset import Otb99_lang, Tnl2k, RefCOCOSeq
@@ -49,7 +49,7 @@ def names2datasets(name_list: list, settings, image_loader):
         assert name in ["LASOT", "GOT10K_vottrain", "GOT10K_votval", "GOT10K_train_full",
                         "COCO17", "VID", "TRACKINGNET", "IMAGENET1K",
                         "DepthTrack_train", "DepthTrack_val", "LasHeR_all", "LasHeR_train","LasHeR_val", "VisEvent",
-                        "REFCOCOG", "TNL2K_train", "OTB99_train","VASTTRACK"]
+                        "REFCOCOG", "TNL2K_train", "OTB99_train","VASTTRACK", "CUSTOM_SOT"]
         if name == "LASOT":
             if settings.use_lmdb:
                 print("Building lasot dataset from lmdb")
@@ -191,6 +191,10 @@ def names2datasets(name_list: list, settings, image_loader):
                                        multi_modal_vision=settings.multi_modal_vision,
                                        multi_modal_language=settings.multi_modal_language
                                        ))
+        if name == "CUSTOM_SOT":
+            datasets.append(CustomSOT(root=settings.env.custom_sot_dirs, image_loader=image_loader,
+                                      multi_modal_vision=settings.multi_modal_vision,
+                                      multi_modal_language=settings.multi_modal_language))
 
     return datasets
 
