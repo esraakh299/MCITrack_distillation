@@ -186,7 +186,14 @@ def build_mcitrack_distill(cfg):
 
     # Load teacher checkpoint and freeze
     teacher_checkpoint = torch.load(cfg.TRAIN.TEACHER_PATH, map_location="cpu")
-    state_dict = teacher_checkpoint['net']
+    if 'net' in teacher_checkpoint:
+        state_dict = teacher_checkpoint['net']
+    elif 'model' in teacher_checkpoint:
+        state_dict = teacher_checkpoint['model']
+    elif 'module' in teacher_checkpoint:
+        state_dict = teacher_checkpoint['module']
+    else:
+        state_dict = teacher_checkpoint
     teacher_model.load_state_dict(state_dict, strict=True)
     for p in teacher_model.parameters():
         p.requires_grad = False
