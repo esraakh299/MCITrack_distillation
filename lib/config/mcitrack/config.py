@@ -67,6 +67,7 @@ cfg.TRAIN.DISTILL_LAYER_T = []        # Teacher layers for feature distillation
 cfg.TRAIN.DISTILL_LAYER_S = []        # Student layers for feature distillation
 cfg.TRAIN.KD_WEIGHT = 5.0             # Weight for KL-divergence logit distillation
 cfg.TRAIN.FEAT_WEIGHT = 0.002         # Weight for feature MSE distillation
+cfg.TRAIN.STUDENT_PATH = ""           # Path to pretrained student checkpoint (optional)
 
 # DATA
 cfg.DATA = edict()

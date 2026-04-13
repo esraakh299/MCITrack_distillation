@@ -225,6 +225,24 @@ def build_mcitrack_distill(cfg):
     # Attach adjust layers to student model
     student_model.adjust_layers = adjust_layers
 
+    # Load pretrained student checkpoint if provided (preserves existing performance)
+    student_ckpt_path = getattr(cfg.TRAIN, 'STUDENT_PATH', None)
+    if student_ckpt_path and os.path.isfile(student_ckpt_path):
+        print(f"[Distill] Loading pretrained student from: {student_ckpt_path}")
+        student_ckpt = torch.load(student_ckpt_path, map_location="cpu")
+        if 'net' in student_ckpt:
+            s_state = student_ckpt['net']
+        elif 'model' in student_ckpt:
+            s_state = student_ckpt['model']
+        elif 'module' in student_ckpt:
+            s_state = student_ckpt['module']
+        else:
+            s_state = student_ckpt
+        missing, unexpected = student_model.load_state_dict(s_state, strict=False)
+        print(f"[Distill] Student loaded. Missing keys: {len(missing)}, Unexpected keys: {len(unexpected)}")
+    else:
+        print("[Distill] No STUDENT_PATH set — student starts from encoder-only pretrained weights.")
+
     # Build adaptive network
     adaptive_net = ADAPTIVE_NET(
         teacher_enc_chan=teacher_encoder.num_channels,
