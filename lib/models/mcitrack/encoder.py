@@ -47,7 +47,7 @@ class Encoder(EncoderBase):
                  cfg=None):
         if "fastitpn" in name.lower():
             encoder = getattr(fastitpn_module, name)(
-                pretrained=is_main_process(),
+                pretrained=train_encoder,
                 search_size=search_size,
                 template_size=template_size,
                 drop_rate=0.0,
