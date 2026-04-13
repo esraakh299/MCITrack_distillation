@@ -32,14 +32,14 @@ class MCITrackDistillActor(BaseActor):
             status      - dict containing detailed losses
         """
         # forward pass (teacher + student + adaptive)
-        out_dict_student, out_dict_teacher, adapt_decisions = self.forward_pass(data)
+        out_dict_student, out_dict_teacher, adapt_logits, adapt_decisions = self.forward_pass(data)
 
         # compute standard losses on student
         loss_standard, status = self.compute_losses(out_dict_student, data)
 
         # compute distillation losses (KD + feature)
         loss_kd, loss_feat, loss_adapt, distill_status = self.compute_losses_distill(
-            out_dict_student, out_dict_teacher, adapt_decisions, data
+            out_dict_student, out_dict_teacher, adapt_logits, adapt_decisions, data
         )
 
         # total student loss = standard + KD + feature
@@ -56,6 +56,7 @@ class MCITrackDistillActor(BaseActor):
 
         out_list_student = []
         out_list_teacher = []
+        all_adapt_logits = []
         all_adapt_decisions = []
 
         neck_h_state_student = [None] * self.cfg.MODEL.NECK.N_LAYERS
@@ -85,12 +86,10 @@ class MCITrackDistillActor(BaseActor):
             )
             outputs_s = self.net(feature=neck_out_s, mode='decoder')
 
-            # --- Adaptive network: decide which samples to distill ---
-            # Use encoder output features for adaptive selection (Option A)
-            teacher_feat_list = [enc_opt_t]  # encoder-level features
+            # --- Adaptive network ---
+            teacher_feat_list = [enc_opt_t]
             student_feat_list = [enc_opt_s]
 
-            # If adjust layers exist, project student features to teacher dimension
             if hasattr(self.net, 'adjust_layers') and self.net.adjust_layers is not None:
                 student_feat_aligned = [self.net.adjust_layers[j](student_feat_list[j])
                                         for j in range(len(student_feat_list))]
@@ -112,9 +111,10 @@ class MCITrackDistillActor(BaseActor):
                 'enc_feat': enc_opt_t,
                 'neck_out': neck_out_t,
             })
+            all_adapt_logits.append(adapt_logits)
             all_adapt_decisions.append(adapt_decisions_i)
 
-        return out_list_student, out_list_teacher, all_adapt_decisions
+        return out_list_student, out_list_teacher, all_adapt_logits, all_adapt_decisions
 
     def compute_losses(self, pred_list, gt_dict, return_status=True):
         """Compute standard tracking losses (same as MCITrackActor)."""
@@ -172,11 +172,8 @@ class MCITrackDistillActor(BaseActor):
         else:
             return total_loss
 
-    def compute_losses_distill(self, out_student, out_teacher, adapt_decisions, data):
-        """Compute distillation losses: KD (KL-div on score maps) + feature MSE.
-
-        Only applied to 'hard' samples selected by the adaptive network.
-        """
+    def compute_losses_distill(self, out_student, out_teacher, adapt_logits, adapt_decisions, data):
+        """Compute distillation losses: KD (KL-div on score maps) + feature MSE."""
         temperature = self.cfg.TRAIN.TEMPERATURE
         kd_weight = self.cfg.TRAIN.KD_WEIGHT
         feat_weight = self.cfg.TRAIN.FEAT_WEIGHT
@@ -188,78 +185,65 @@ class MCITrackDistillActor(BaseActor):
         for i in range(len(out_student)):
             student_out = out_student[i]['outputs']
             teacher_out = out_teacher[i]['outputs']
-            decisions = adapt_decisions[i]  # list of [B, 2] tensors
+            decisions = adapt_decisions[i]
+            logits = adapt_logits[i]
 
             # --- KD loss on score maps ---
             if 'score_map' in student_out and 'score_map' in teacher_out:
-                s_score = student_out['score_map']  # (B, 1, H, W)
-                t_score = teacher_out['score_map']  # (B, 1, H, W)
-
+                s_score = student_out['score_map']
+                t_score = teacher_out['score_map']
                 B = s_score.shape[0]
-                s_flat = s_score.view(B, -1)  # (B, H*W)
-                t_flat = t_score.view(B, -1)  # (B, H*W)
-
-                # KL-divergence with temperature scaling
+                s_flat = s_score.view(B, -1)
+                t_flat = t_score.view(B, -1)
                 log_s = F.log_softmax(s_flat / temperature, dim=-1)
                 soft_t = F.softmax(t_flat / temperature, dim=-1)
+                kd_per_sample = F.kl_div(log_s, soft_t, reduction='none').sum(dim=-1) * (temperature ** 2)
 
-                kd_per_sample = F.kl_div(log_s, soft_t, reduction='none').sum(dim=-1)  # (B,)
-                kd_per_sample = kd_per_sample * (temperature ** 2)
-
-                # Apply adaptive mask (only hard samples)
                 if len(decisions) > 0:
-                    mask = decisions[0][:, 0]  # hard sample indicator (B,)
+                    mask = decisions[0][:, 0]
                     kd_loss = (kd_per_sample * mask).mean()
                 else:
                     kd_loss = kd_per_sample.mean()
-
                 total_kd_loss += kd_weight * kd_loss
 
-            # --- Feature MSE loss at encoder level ---
-            student_feat_aligned = out_student[i]['enc_feat_aligned']  # (B, L, C_teacher)
-            teacher_feat = out_teacher[i]['enc_feat']  # (B, L, C_teacher)
-
-            feat_mse_per_sample = F.mse_loss(
-                student_feat_aligned, teacher_feat.detach(), reduction='none'
-            ).mean(dim=(1, 2))  # (B,)
+            # --- Feature MSE loss ---
+            student_feat_aligned = out_student[i]['enc_feat_aligned']
+            teacher_feat = out_teacher[i]['enc_feat']
+            feat_mse_per_sample = F.mse_loss(student_feat_aligned, teacher_feat.detach(), reduction='none').mean(dim=(1, 2))
 
             if len(decisions) > 0:
                 mask = decisions[0][:, 0]
                 feat_loss = (feat_mse_per_sample * mask).mean()
             else:
                 feat_loss = feat_mse_per_sample.mean()
-
             total_feat_loss += feat_weight * feat_loss
 
             # --- Adaptive network loss ---
-            # The adaptive net should learn to select hard samples
-            # Loss: encourage selection when student IoU is worse than teacher IoU
             with torch.no_grad():
-                s_boxes = box_cxcywh_to_xyxy(student_out['pred_boxes']).view(-1, 4)
-                t_boxes = box_cxcywh_to_xyxy(teacher_out['pred_boxes']).view(-1, 4)
-                gt_bbox = data['search_anno'][i]
-                gt_boxes = box_xywh_to_xyxy(gt_bbox).clamp(min=0.0, max=1.0)
+                s_boxes = box_cxcywh_to_xyxy(student_out['pred_boxes']) # (B, Q, 4)
+                t_boxes = box_cxcywh_to_xyxy(teacher_out['pred_boxes']) # (B, Q, 4)
+                gt_bbox = data['search_anno'][i] # (B, 4)
+                gt_boxes = box_xywh_to_xyxy(gt_bbox).clamp(min=0.0, max=1.0) # (B, 4)
+                
+                B, Q, _ = s_boxes.shape
+                # Match each query in the whole batch to its corresponding sample's ground truth
+                gt_boxes_rep = gt_boxes.unsqueeze(1).repeat(1, Q, 1).view(-1, 4)
+                s_boxes_flat = s_boxes.view(-1, 4)
+                t_boxes_flat = t_boxes.view(-1, 4)
+                
+                _, iou_s_vec = box_iou(s_boxes_flat, gt_boxes_rep)
+                _, iou_t_vec = box_iou(t_boxes_flat, gt_boxes_rep)
+                
+                # Reshape back and take best query per sample
+                iou_s = iou_s_vec.diag().view(B, Q).max(dim=1)[0]
+                iou_t = iou_t_vec.diag().view(B, Q).max(dim=1)[0]
 
-                try:
-                    _, iou_s = box_iou(s_boxes, gt_boxes)
-                    _, iou_t = box_iou(t_boxes, gt_boxes)
-                    iou_s = iou_s.diag()
-                    iou_t = iou_t.diag()
-                except:
-                    iou_s = torch.zeros(s_boxes.shape[0]).cuda()
-                    iou_t = torch.zeros(t_boxes.shape[0]).cuda()
+                hard_target = (iou_t > iou_s).long() # (B,)
 
-                # Hard samples: where teacher is better than student
-                hard_target = (iou_t > iou_s).float()  # (B,)
-
-            # Adaptive net cross-entropy loss
-            if len(decisions) > 0:
-                for dec in decisions:
-                    # dec: (B, 2) one-hot, target: (B,) binary
-                    adapt_ce = F.cross_entropy(
-                        adapt_decisions[i][0] if len(adapt_decisions[i]) > 0 else dec,
-                        hard_target.long()
-                    )
+            # Train adaptive net with raw logits
+            if len(logits) > 0:
+                for logit in logits:
+                    adapt_ce = F.cross_entropy(logit, hard_target)
                     total_adapt_loss += adapt_ce
 
         distill_status = {
