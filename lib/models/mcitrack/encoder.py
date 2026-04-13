@@ -85,3 +85,17 @@ def build_encoder(cfg):
                       cfg.DATA.TEMPLATE.SIZE, cfg.DATA.TEMPLATE.NUMBER,
                       cfg.TRAIN.ENCODER_OPEN, cfg)
     return encoder
+
+
+def build_encoder_teacher(cfg):
+    """Build the teacher encoder for knowledge distillation.
+    Uses TRAIN.TEACHER_TYPE instead of MODEL.ENCODER.TYPE.
+    The teacher encoder is not trained, so train_encoder=False.
+    """
+    encoder = Encoder(cfg.TRAIN.TEACHER_TYPE, False,
+                      cfg.MODEL.ENCODER.PRETRAIN_TYPE,
+                      cfg.DATA.SEARCH.SIZE, cfg.DATA.SEARCH.NUMBER,
+                      cfg.DATA.TEMPLATE.SIZE, cfg.DATA.TEMPLATE.NUMBER,
+                      [], cfg)
+    return encoder
+

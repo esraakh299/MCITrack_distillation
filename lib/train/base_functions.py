@@ -299,3 +299,71 @@ def get_optimizer_scheduler(net, cfg):
     else:
         raise ValueError("Unsupported scheduler")
     return optimizer, lr_scheduler
+
+
+def get_optimizer_scheduler_adapt(net, adaptive_net, cfg):
+    """Create separate optimizer+scheduler for student and adaptive net."""
+    train_type = getattr(cfg.TRAIN, "TYPE", None)
+
+    if train_type == "peft":
+        param_dicts = [
+            {"params": [p for n, p in net.named_parameters() if "prompt" in n and p.requires_grad]},
+        ]
+        for n, p in net.named_parameters():
+            if "prompt" not in n:
+                p.requires_grad = False
+    elif train_type == "fft":
+        param_dicts = [
+            {"params": [p for n, p in net.named_parameters() if "prompt" not in n and p.requires_grad]},
+            {
+                "params": [p for n, p in net.named_parameters() if "prompt" in n and p.requires_grad],
+                "lr": cfg.TRAIN.LR / cfg.TRAIN.ENCODER_MULTIPLIER,
+            },
+        ]
+    else:
+        param_dicts = [
+            {"params": [p for n, p in net.named_parameters() if "encoder" not in n and p.requires_grad]},
+            {
+                "params": [p for n, p in net.named_parameters() if "encoder" in n and p.requires_grad],
+                "lr": cfg.TRAIN.LR * cfg.TRAIN.ENCODER_MULTIPLIER,
+            },
+        ]
+
+    if is_main_process():
+        print("Learnable student parameters are shown below.")
+        for n, p in net.named_parameters():
+            if p.requires_grad:
+                print(n)
+
+    # Adaptive net parameters
+    param_dicts_adapt = [
+        {"params": [p for n, p in adaptive_net.named_parameters() if p.requires_grad]},
+    ]
+    if is_main_process():
+        print("Learnable adaptive net parameters are shown below.")
+        for n, p in adaptive_net.named_parameters():
+            if p.requires_grad:
+                print(n)
+
+    if cfg.TRAIN.OPTIMIZER == "ADAMW":
+        optimizer = torch.optim.AdamW(param_dicts, lr=cfg.TRAIN.LR,
+                                      weight_decay=cfg.TRAIN.WEIGHT_DECAY)
+        optimizer_adapt = torch.optim.AdamW(param_dicts_adapt, lr=cfg.TRAIN.LR,
+                                            weight_decay=cfg.TRAIN.WEIGHT_DECAY)
+    else:
+        raise ValueError("Unsupported Optimizer")
+
+    if cfg.TRAIN.SCHEDULER.TYPE == 'step':
+        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, cfg.TRAIN.LR_DROP_EPOCH)
+        lr_scheduler_adapt = torch.optim.lr_scheduler.StepLR(optimizer_adapt, cfg.TRAIN.LR_DROP_EPOCH)
+    elif cfg.TRAIN.SCHEDULER.TYPE == "Mstep":
+        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
+                                                            milestones=cfg.TRAIN.SCHEDULER.MILESTONES,
+                                                            gamma=cfg.TRAIN.SCHEDULER.GAMMA)
+        lr_scheduler_adapt = torch.optim.lr_scheduler.MultiStepLR(optimizer_adapt,
+                                                                   milestones=cfg.TRAIN.SCHEDULER.MILESTONES,
+                                                                   gamma=cfg.TRAIN.SCHEDULER.GAMMA)
+    else:
+        raise ValueError("Unsupported scheduler")
+
+    return optimizer, lr_scheduler, optimizer_adapt, lr_scheduler_adapt

@@ -58,6 +58,16 @@ cfg.TRAIN.SCHEDULER.DECAY_RATE = 0.1
 cfg.TRAIN.TYPE = "normal" # normal, peft or fft
 cfg.TRAIN.PRETRAINED_PATH = None
 
+# DISTILL
+cfg.TRAIN.TEMPERATURE = 1.0          # KD temperature for logit distillation
+cfg.TRAIN.TEACHER_TYPE = 'fastitpnl'  # Teacher encoder type
+cfg.TRAIN.TEACHER_PATH = ""           # Path to teacher checkpoint
+cfg.TRAIN.TEACHER_INTERACTION_INDEXES = [[6, 16], [16, 26], [26, 36], [36, 46]]  # Teacher interaction indexes
+cfg.TRAIN.DISTILL_LAYER_T = []        # Teacher layers for feature distillation
+cfg.TRAIN.DISTILL_LAYER_S = []        # Student layers for feature distillation
+cfg.TRAIN.KD_WEIGHT = 5.0             # Weight for KL-divergence logit distillation
+cfg.TRAIN.FEAT_WEIGHT = 0.002         # Weight for feature MSE distillation
+
 # DATA
 cfg.DATA = edict()
 cfg.DATA.MEAN = [0.485, 0.456, 0.406]

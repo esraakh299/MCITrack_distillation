@@ -292,11 +292,11 @@ class RMSNorm(nn.Module):
         return output
 
 
-def build_neck(cfg,encoder):
+def build_neck(cfg, encoder, d_model_override=None):
     in_channel = encoder.num_channels
-    d_model = cfg.MODEL.NECK.D_MODEL
+    d_model = d_model_override if d_model_override is not None else cfg.MODEL.NECK.D_MODEL
     n_layers = cfg.MODEL.NECK.N_LAYERS
     d_state = cfg.MODEL.NECK.D_STATE
     grad_ckpt = cfg.MODEL.ENCODER.GRAD_CKPT
     neck = Mamba_Neck(in_channel=in_channel,d_model=d_model,d_inner=2*d_model,n_layers=n_layers,dt_rank=d_model//16,d_state=d_state,grad_ckpt=grad_ckpt)
-    return neck
+    return neck
