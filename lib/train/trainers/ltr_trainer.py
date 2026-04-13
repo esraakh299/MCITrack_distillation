@@ -391,29 +391,29 @@ class LTRTrainer_adapt(BaseTrainer):
                     loss, loss_adapt, stats = self.actor(data)
 
             if loader.training:
-                # Pass 1: Update adaptive network
+                # Accumulate gradients for both
                 self.optimizer_adapt.zero_grad()
+                self.optimizer.zero_grad()
+
                 if not self.use_amp:
+                    # Backward pass 1: Adaptive Net (retain graph because loss depends on decisions)
                     loss_adapt.backward(retain_graph=True)
+                    # Backward pass 2: Student Net
+                    loss.backward()
+                    
                     if self.settings.grad_clip_norm > 0:
                         torch.nn.utils.clip_grad_norm_(
                             self.actor.adaptive_net.parameters(), self.settings.grad_clip_norm)
-                    self.optimizer_adapt.step()
-                else:
-                    self.scaler.scale(loss_adapt).backward(retain_graph=True)
-                    self.scaler.step(self.optimizer_adapt)
-                    self.scaler.update()
-
-                # Pass 2: Update student network
-                self.optimizer.zero_grad()
-                if not self.use_amp:
-                    loss.backward()
-                    if self.settings.grad_clip_norm > 0:
                         torch.nn.utils.clip_grad_norm_(
                             self.actor.net.parameters(), self.settings.grad_clip_norm)
+                    
+                    self.optimizer_adapt.step()
                     self.optimizer.step()
                 else:
+                    self.scaler.scale(loss_adapt).backward(retain_graph=True)
                     self.scaler.scale(loss).backward()
+                    
+                    self.scaler.step(self.optimizer_adapt)
                     self.scaler.step(self.optimizer)
                     self.scaler.update()
 

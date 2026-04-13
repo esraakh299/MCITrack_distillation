@@ -200,7 +200,7 @@ class MCITrackDistillActor(BaseActor):
                 kd_per_sample = F.kl_div(log_s, soft_t, reduction='none').sum(dim=-1) * (temperature ** 2)
 
                 if len(decisions) > 0:
-                    mask = decisions[0][:, 0]
+                    mask = decisions[0][:, 0].detach()
                     kd_loss = (kd_per_sample * mask).mean()
                 else:
                     kd_loss = kd_per_sample.mean()
@@ -212,7 +212,7 @@ class MCITrackDistillActor(BaseActor):
             feat_mse_per_sample = F.mse_loss(student_feat_aligned, teacher_feat.detach(), reduction='none').mean(dim=(1, 2))
 
             if len(decisions) > 0:
-                mask = decisions[0][:, 0]
+                mask = decisions[0][:, 0].detach()
                 feat_loss = (feat_mse_per_sample * mask).mean()
             else:
                 feat_loss = feat_mse_per_sample.mean()
