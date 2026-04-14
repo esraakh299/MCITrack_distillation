@@ -59,13 +59,13 @@ TRAIN:
   # Distillation settings
   TEMPERATURE: 1.0
   TEACHER_TYPE: fastitpnl
-  TEACHER_PATH: '/path/to/teacher/MCITrack_ep0300.pth.tar'  # UPDATE THIS
+  TEACHER_PATH: '/kaggle/working/mcitrack_l224.pth.tar'
   TEACHER_INTERACTION_INDEXES: [[6, 16], [16, 26], [26, 36], [36, 46]]
   DISTILL_LAYER_T: [40]  # Teacher last encoder layer
   DISTILL_LAYER_S: [12]  # Student last encoder layer
   KD_WEIGHT: 5.0
   FEAT_WEIGHT: 0.002
-  STUDENT_PATH: '/path/to/student/mcitrack_t224.pth.tar'  # UPDATE THIS
+  STUDENT_PATH: '/kaggle/working/mcitrack_t224.pth.tar'
 TEST:
   EPOCH: 50
   SEARCH_FACTOR: 4.0
