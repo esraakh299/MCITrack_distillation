@@ -329,7 +329,11 @@ class LTRTrainer_adapt(BaseTrainer):
         else:
             raise TypeError
 
-        checkpoint_dict = torch.load(checkpoint_path, map_location='cpu')
+        try:
+            checkpoint_dict = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
+        except Exception:
+            checkpoint_dict = torch.load(checkpoint_path, map_location='cpu')
+            
         assert net_type == checkpoint_dict['net_type'], 'Network is not of correct type.'
 
         if fields is None:
